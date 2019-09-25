@@ -15,7 +15,7 @@ var isRequest bool
 var accessed int
 var kind string
 var cl *redis.Client
-var packages map[string]bool
+var packages = make(map[string]bool, 0)
 
 type Route struct {
 	Description  string      `json:"description" bson:"description"`
