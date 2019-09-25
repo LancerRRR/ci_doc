@@ -15,6 +15,7 @@ var isRequest bool
 var accessed int
 var kind string
 var cl *redis.Client
+var packages map[string]bool
 
 type Route struct {
 	Description  string      `json:"description" bson:"description"`
@@ -49,6 +50,12 @@ type ResponseNested struct {
 	Type        string      `json:"type" bson:"type"`
 	Description string      `json:"description" bson:"description"`
 	Nested      interface{} `json:"nested" bson:"nested"`
+}
+
+func SpecifyPackages(pks []string) {
+	for _, v := range pks {
+		packages[v] = true
+	}
 }
 
 func AddRoute(route Route) {
@@ -154,15 +161,9 @@ func InterfaceToJSON(v interface{}) interface{} {
 
 func InterfaceToType(v interface{}) interface{} {
 	if v == nil {
-		if isRequest {
-			field := Request{}
-			field.Type = "interface"
-			return field
-		} else {
-			field := Response{}
-			field.Type = "interface"
-			return field
-		}
+		field := Request{}
+		field.Type = "interface"
+		return field
 	}
 	// switch v.(type) {
 	// case time.Time:
@@ -170,14 +171,9 @@ func InterfaceToType(v interface{}) interface{} {
 	// }
 	switch reflect.TypeOf(v).Kind() {
 	case reflect.Struct:
-		if (len(reflect.TypeOf(v).String()) >= 7 && reflect.TypeOf(v).String()[:7] == "request") || (len(reflect.TypeOf(v).String()) >= 8 && reflect.TypeOf(v).String()[:8] == "response") {
+		if packages[getPrefix(reflect.TypeOf(v).String())] {
 			accessed1 := accessed
 			kind1 := kind
-			if reflect.TypeOf(v).String()[:7] == "request" {
-				isRequest = true
-			} else {
-				isRequest = false
-			}
 			val := reflect.ValueOf(v)
 			typeOfTstObj := val.Type()
 			out := make(map[string]interface{}, 0)
@@ -211,68 +207,48 @@ func InterfaceToType(v interface{}) interface{} {
 				return output
 			}
 			if accessed1 == 1 {
-				if isRequest {
-					output := RequestNested{}
-					output.Nested = out
-					output.Type = kind1
-					output.Description = description
-					output.IsRequired = isRequired
-					return output
-				} else {
-					output := ResponseNested{}
-					output.Nested = out
-					output.Type = kind1
-					output.Description = description
-					return output
-				}
+				output := RequestNested{}
+				output.Nested = out
+				output.Type = kind1
+				output.Description = description
+				output.IsRequired = isRequired
+				return output
 			}
 			accessed = 0
 			return out
 		} else {
-			if isRequest {
-				field := Request{}
-				field.Type = reflect.TypeOf(v).String()
-				field.Description = description
-				field.IsRequired = isRequired
-				return field
-			} else {
-				field := Response{}
-				field.Type = reflect.TypeOf(v).String()
-				field.Description = description
-				return field
-			}
-		}
-	case reflect.Slice:
-		val := reflect.ValueOf(v)
-		if val.Len() == 0 {
-			if isRequest {
-				field := Request{}
-				field.Type = reflect.TypeOf(v).String()
-				field.Description = description
-				field.IsRequired = isRequired
-				return field
-			} else {
-				field := Response{}
-				field.Type = reflect.TypeOf(v).String()
-				field.Description = description
-				return field
-			}
-		}
-		kind = "array"
-		accessed = 1
-		return InterfaceToType(val.Index(0).Interface())
-	default:
-		if isRequest {
 			field := Request{}
 			field.Type = reflect.TypeOf(v).String()
 			field.Description = description
 			field.IsRequired = isRequired
 			return field
-		} else {
-			field := Response{}
+		}
+	case reflect.Slice:
+		val := reflect.ValueOf(v)
+		if val.Len() == 0 {
+			field := Request{}
 			field.Type = reflect.TypeOf(v).String()
 			field.Description = description
+			field.IsRequired = isRequired
 			return field
 		}
+		kind = "array"
+		accessed = 1
+		return InterfaceToType(val.Index(0).Interface())
+	default:
+		field := Request{}
+		field.Type = reflect.TypeOf(v).String()
+		field.Description = description
+		field.IsRequired = isRequired
+		return field
 	}
+}
+
+func getPrefix(s string) string {
+	for i, _ := range s {
+		if string(s[i]) == "." {
+			return s[:i]
+		}
+	}
+	return ""
 }
