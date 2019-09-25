@@ -72,7 +72,7 @@ func UploadRoutes() error {
 			route.Response = InterfaceToType(route.Response)
 		}
 		bytes, _ := bson.Marshal(route)
-		err := cl.Set(route.Path, string(bytes), 0).Err()
+		err := cl.Set("route"+route.Path, string(bytes), 0).Err()
 		if err != nil {
 			return err
 		}
@@ -81,13 +81,12 @@ func UploadRoutes() error {
 }
 
 func GetAllRoutes() ([]Route, error) {
-	cl.FlushDB()
 	allkeys := []string{}
 	var cursor uint64
 	for {
 		var keys []string
 		var err error
-		keys, cursor, err = cl.Scan(cursor, "*", 10).Result()
+		keys, cursor, err = cl.Scan(cursor, "route*", 10).Result()
 		if err != nil {
 			return nil, err
 		}
