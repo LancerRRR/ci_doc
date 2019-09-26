@@ -72,7 +72,7 @@ func UploadRoutes() error {
 			route.Response = InterfaceToType(route.Response)
 		}
 		bytes, _ := bson.Marshal(route)
-		err := cl.Set("route"+route.Path, string(bytes), 0).Err()
+		err := cl.Set("route"+route.Method+route.Path, string(bytes), 0).Err()
 		if err != nil {
 			return err
 		}
@@ -171,7 +171,6 @@ func InterfaceToType(v interface{}) interface{} {
 	switch reflect.TypeOf(v).Kind() {
 	case reflect.Struct:
 		if packages[getPrefix(reflect.TypeOf(v).String())] {
-			accessed1 := accessed
 			kind1 := kind
 			val := reflect.ValueOf(v)
 			typeOfTstObj := val.Type()
@@ -197,24 +196,12 @@ func InterfaceToType(v interface{}) interface{} {
 				}
 				out[key] = value
 			}
-			if !isRequest {
-				output := RequestNested{}
-				output.Nested = out
-				output.Type = kind1
-				output.Description = description
-				output.IsRequired = isRequired
-				return output
-			}
-			if accessed1 == 1 {
-				output := RequestNested{}
-				output.Nested = out
-				output.Type = kind1
-				output.Description = description
-				output.IsRequired = isRequired
-				return output
-			}
-			accessed = 0
-			return out
+			output := RequestNested{}
+			output.Nested = out
+			output.Type = kind1
+			output.Description = description
+			output.IsRequired = isRequired
+			return output
 		} else {
 			field := Request{}
 			field.Type = reflect.TypeOf(v).String()
