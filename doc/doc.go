@@ -2,13 +2,12 @@ package doc
 
 import (
 	"crypto/tls"
+	"fmt"
+	"gopkg.in/mgo.v2"
+	"gopkg.in/mgo.v2/bson"
 	"net"
 	"reflect"
 	"time"
-
-	"github.com/go-redis/redis"
-	"gopkg.in/mgo.v2"
-	"gopkg.in/mgo.v2/bson"
 )
 
 var routes []Route
@@ -17,7 +16,6 @@ var description string
 var isRequest bool
 var accessed int
 var kind string
-var cl *redis.Client
 var packages = make(map[string]bool, 0)
 var Mongodb *mgo.Session
 
@@ -102,13 +100,13 @@ func GetAllRoutes() ([]Route, error) {
 	return out, err
 }
 
-func InitRedis(url string, password string) {
-	cl = redis.NewClient(&redis.Options{
-		Addr:     url,
-		Password: password,
-		DB:       0,
-	})
-}
+//func InitRedis(url string, password string) {
+//	cl = redis.NewClient(&redis.Options{
+//		Addr:     url,
+//		Password: password,
+//		DB:       0,
+//	})
+//}
 
 // allkeys := []string{}
 // 	var cursor uint64
@@ -248,16 +246,67 @@ func InterfaceToType(v interface{}) interface{} {
 		}
 	case reflect.Slice:
 		val := reflect.ValueOf(v)
-		if val.Len() == 0 {
+		if val.Type().Elem().Kind() != reflect.Struct || (val.Type().Elem().Kind() == reflect.Ptr && val.Type().Elem().Elem().Kind() == reflect.Struct) {
 			field := Request{}
 			field.Type = reflect.TypeOf(v).String()
 			field.Description = description
 			field.IsRequired = isRequired
 			return field
 		}
+		// if val.Len() == 0 {
+
+		// 	field := Request{}
+		// 	field.Type = reflect.TypeOf(v).String()
+		// 	field.Description = description
+		// 	field.IsRequired = isRequired
+		// 	return field
+		// }
 		kind = "array"
 		accessed = 1
-		return InterfaceToType(val.Index(0).Interface())
+		return InterfaceToType(reflect.New(val.Type().Elem().Elem()).Interface())
+	case reflect.Ptr:
+		fmt.Println("ptr: ", reflect.TypeOf(v).String())
+		if packages[getPrefix(reflect.TypeOf(v).String())] {
+			kind1 := kind
+			val := reflect.Indirect(reflect.ValueOf(v))
+			fmt.Println("ptr: ", reflect.ValueOf(v))
+			typeOfTstObj := val.Type()
+			out := make(map[string]interface{}, 0)
+			output := RequestNested{}
+			output.Description = description
+			for i := 0; i < val.NumField(); i++ {
+				fieldType := val.Field(i)
+				isRequired = false
+				description = ""
+				if typeOfTstObj.Field(i).Tag.Get("required") == "1" {
+					isRequired = true
+				}
+				description = typeOfTstObj.Field(i).Tag.Get("description")
+				kind = "object"
+				accessed = 1
+				value := InterfaceToType(fieldType.Interface())
+				jsonTag := typeOfTstObj.Field(i).Tag.Get("json")
+				fmt.Println("jsonTag: ", jsonTag)
+				key := ""
+				for i := 0; i < len(jsonTag); i++ {
+					if string(jsonTag[i]) == "," {
+						break
+					}
+					key += string(jsonTag[i])
+				}
+				out[key] = value
+			}
+			output.Nested = out
+			output.Type = kind1
+			output.IsRequired = isRequired
+			return output
+		} else {
+			field := Request{}
+			field.Type = reflect.TypeOf(v).String()
+			field.Description = description
+			field.IsRequired = isRequired
+			return field
+		}
 	default:
 		field := Request{}
 		field.Type = reflect.TypeOf(v).String()
